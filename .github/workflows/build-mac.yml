@@ -2,48 +2,54 @@ name: Build Mac App
 
 on:
   push:
-    tags:
-      - 'v*'
+    branches: [ "master", "main" ]
   workflow_dispatch:
 
 jobs:
-  build-mac:
+  build:
     runs-on: macos-latest
-    permissions:
-      contents: write
-    
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-      
-    - name: Setup Node.js
-      uses: actions/setup-node@v4
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
-        node-version: '18'
-        cache: 'npm'
-        cache-dependency-path: 'bongo-cat-electron/package-lock.json'
-        
+        python-version: '3.10'
+
     - name: Install dependencies
       run: |
-        cd bongo-cat-electron
-        npm ci
-        
-    - name: Build Mac app
+        python -m pip install --upgrade pip
+        pip install -r bongo_cat_app/requirements.txt
+        pip install pyinstaller
+        # Install a tool to create the DMG file
+        brew install create-dmg
+
+    - name: Build .app with PyInstaller
       run: |
-        cd bongo-cat-electron
-        npm run build:mac
+        # Note the colon (:) for Mac paths instead of semicolon (;)
+        pyinstaller --noconsole --windowed --name "BongoCat" --add-data "bongo_cat_app/assets:assets" --icon "bongo_cat_app/assets/tray_icon.png" bongo_cat_app/main.py
+
+    - name: Create DMG
+      run: |
+        # Create a folder for the DMG contents
+        mkdir -p dist/dmg
+        cp -r "dist/BongoCat.app" dist/dmg
         
-    - name: Upload DMG artifact
+        # Create the DMG file
+        create-dmg \
+          --volname "Bongo Cat Installer" \
+          --window-pos 200 120 \
+          --window-size 800 400 \
+          --icon-size 100 \
+          --icon "BongoCat.app" 200 190 \
+          --hide-extension "BongoCat.app" \
+          --app-drop-link 600 185 \
+          "dist/BongoCat_Mac.dmg" \
+          "dist/dmg/"
+
+    - name: Upload Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: bongo-cat-mac-dmg
-        path: bongo-cat-electron/dist/*.dmg
-        
-    - name: Create Release (if tag)
-      if: startsWith(github.ref, 'refs/tags/v')
-      uses: softprops/action-gh-release@v1
-      with:
-        files: bongo-cat-electron/dist/*.dmg
-        generate_release_notes: true
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        name: BongoCat_Mac_DMG
+        path: dist/BongoCat_Mac.dmg
