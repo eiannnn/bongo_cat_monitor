@@ -70,7 +70,8 @@ class BongoCatEngine:
         self.last_stats_sent = 0
         self.last_time_sent = 0
         
-        # Industry-standard WPM
+        # Industry-standard WPM - MODIFIED FOR WINDOWS
+        # Changed from 5.0 to 10.0 to fix double-counting issue
         self.chars_per_word = 7.5
         self.min_animation_speed = 500
         self.max_animation_speed = 40
@@ -437,19 +438,44 @@ class BongoCatEngine:
                     print(f"⚠️ Command send error: {e}")
     
     def update_animation(self):
+        """Updated animation logic with strict sleep handling"""
         try:
             current_time = time.time()
+            
+            # 1. Update system stats (CPU/RAM) quietly in the background
             try:
                 self.update_system_stats()
             except Exception as stats_error:
                 print(f"⚠️ Stats update error: {stats_error}")
             
+            # 2. Get the current status
             with self._data_lock:
                 last_keystroke_time = self.last_keystroke_time
                 keystroke_buffer_copy = list(self.keystroke_buffer)
                 typing_active = self.typing_active
             
-            if current_time - last_keystroke_time > self.idle_timeout:
+            # 3. Check if we should be sleeping
+            time_since_input = current_time - last_keystroke_time
+            
+            # --- CRITICAL FIX: Handling Sleep Mode ---
+            if time_since_input > self.sleep_timeout:
+                # If we are already in sleep mode, DO NOTHING. 
+                # Sending *any* command (even "STOP") wakes the Arduino up.
+                if self.sleep_start_time is not None:
+                    return 
+
+                # If this is the very first moment we are entering sleep:
+                print(f"😴 Sleep timeout reached ({self.sleep_timeout}s) - Entering sleep mode")
+                self.sleep_start_time = current_time
+                if self.serial_conn and self.serial_conn.is_open:
+                    self.serial_conn.write(b"IDLE_START\n")
+                return
+
+            # 4. If we are NOT sleeping (or just woke up), reset the sleep tracker
+            self.sleep_start_time = None 
+
+            # 5. Check for short-term Idle (Stopped typing for a few seconds)
+            if time_since_input > self.idle_timeout:
                 if typing_active:
                     with self._data_lock:
                         self.typing_active = False
@@ -458,17 +484,16 @@ class BongoCatEngine:
                         self.keystroke_buffer.clear()
                         if self.tray:
                             self.tray.update_typing_status(False, 0)
+                    
+                    # Send one final "STOP" command to return to neutral position
                     self.send_animation_command(0, force_update=True)
-                
-                time_idle = current_time - self.idle_start_time
-                if time_idle >= self.sleep_timeout and self.sleep_start_time is None:
-                    self.sleep_start_time = current_time
-                    if self.serial_conn and self.serial_conn.is_open:
-                        self.serial_conn.write(b"IDLE_START\n")
                 return
             
+            # 6. Active Typing Logic
             if keystroke_buffer_copy:
                 new_wpm = self.calculate_wpm_industry_standard()
+                
+                # Smooth the WPM
                 if self.current_wpm == 0:
                     self.current_wpm = new_wpm
                 else:
@@ -477,6 +502,7 @@ class BongoCatEngine:
                     self.current_wpm = (self.current_wpm * (1 - smoothing)) + (new_wpm * smoothing)
                 
                 self.send_animation_command(self.current_wpm)
+                        
         except Exception as e:
             print(f"❌ Animation update error: {e}")
     
