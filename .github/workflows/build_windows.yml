@@ -1,0 +1,37 @@
+name: Build Windows App
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Install the dependencies from your renamed file
+        pip install -r bongo_cat_app/requirements.txt
+
+    - name: Build with PyInstaller
+      run: |
+        # This command builds the EXE using your modified main.py
+        # --noconsole: Hides the black terminal window
+        # --add-data: Includes the assets folder (icons) inside the exe
+        pyinstaller --noconsole --onefile --name "BongoCat_Setup" --add-data "bongo_cat_app/assets;assets" bongo_cat_app/main.py
+
+    - name: Upload Artifact
+      uses: actions/upload-artifact@v3
+      with:
+        name: BongoCat_Windows_App
+        path: dist/BongoCat_Setup.exe
