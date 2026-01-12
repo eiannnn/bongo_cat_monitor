@@ -71,7 +71,7 @@ class BongoCatEngine:
         self.last_time_sent = 0
         
         # Industry-standard WPM
-        self.chars_per_word = 5.0
+        self.chars_per_word = 10
         self.min_animation_speed = 500
         self.max_animation_speed = 40
         
