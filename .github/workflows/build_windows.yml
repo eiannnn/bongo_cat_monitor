@@ -10,10 +10,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4  # Updated to v4 for safety
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5 # Updated to v5 for safety
       with:
         python-version: '3.10'
 
@@ -22,16 +22,15 @@ jobs:
         python -m pip install --upgrade pip
         # Install the dependencies from your renamed file
         pip install -r bongo_cat_app/requirements.txt
+        pip install pyinstaller
 
     - name: Build with PyInstaller
       run: |
-        # This command builds the EXE using your modified main.py
-        # --noconsole: Hides the black terminal window
-        # --add-data: Includes the assets folder (icons) inside the exe
+        # Build the EXE
         pyinstaller --noconsole --onefile --name "BongoCat_Setup" --add-data "bongo_cat_app/assets;assets" bongo_cat_app/main.py
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4  # <--- THIS IS THE FIX (v3 -> v4)
       with:
         name: BongoCat_Windows_App
         path: dist/BongoCat_Setup.exe
